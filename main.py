@@ -1,13 +1,16 @@
 """Coolest Art Entry: Mending the Crescent Moon with Starlight.
 
-Deterministic entry script that copies the bundled 1024x1024 PNG artwork
+SPDX-License-Identifier: MIT
+Deterministic entry script that writes the 1024x1024 PNG artwork
 to the configured output directory (/output/entry.png by default).
 """
 
+import base64
 import hashlib
 import os
 from pathlib import Path
 import struct
+from art_data import ART_PNG_B64
 
 DEFAULT_OUTPUT_DIR = "/output"
 ENTRY_FILENAME = "entry.png"
@@ -23,25 +26,21 @@ def get_output_dir() -> Path:
     return out_dir
 
 
-def verify_image(path: Path) -> bytes:
-    """Verify the bundled entry image exists, satisfies size bounds, has PNG header, and expected dimensions."""
-    if not path.is_file():
-        raise FileNotFoundError(f"Missing bundled entry image: {path}")
-
-    data = path.read_bytes()
+def verify_image_bytes(data: bytes) -> bytes:
+    """Verify the generated entry image satisfies size bounds, has PNG header, and expected dimensions."""
     if len(data) > MAX_FILE_SIZE:
         raise ValueError(
             f"Image file size {len(data)} bytes exceeds maximum allowed limit of {MAX_FILE_SIZE} bytes (1 MiB)"
         )
 
     if not data.startswith(PNG_MAGIC):
-        raise ValueError(f"File {path} does not have a valid PNG signature header.")
+        raise ValueError("Image data does not have a valid PNG signature header.")
 
     if len(data) < 24:
-        raise ValueError(f"File {path} is too small to contain valid PNG header and IHDR chunk.")
+        raise ValueError("Image data is too small to contain valid PNG header and IHDR chunk.")
 
     if data[12:16] != b"IHDR":
-        raise ValueError(f"File {path} first chunk is not IHDR.")
+        raise ValueError("First chunk is not IHDR.")
 
     width, height = struct.unpack(">II", data[16:24])
     if (width, height) != EXPECTED_SIZE:
@@ -50,19 +49,18 @@ def verify_image(path: Path) -> bytes:
     return data
 
 
-def export_entry(src: Path, dst: Path) -> str:
-    """Verify and deterministically write the entry image bytes from src to dst."""
-    data = verify_image(src)
+def export_entry(dst: Path) -> str:
+    """Decode and deterministically write the entry image bytes to dst."""
+    data = base64.b64decode(ART_PNG_B64.strip())
+    verify_image_bytes(data)
     dst.write_bytes(data)
     return hashlib.sha256(data).hexdigest()
 
 
 def main() -> None:
-    repo_root = Path(__file__).resolve().parent
-    src = repo_root / ENTRY_FILENAME
     out_dir = get_output_dir()
     dst = out_dir / ENTRY_FILENAME
-    digest = export_entry(src, dst)
+    digest = export_entry(dst)
     print(f"Wrote {dst} (sha256={digest})")
 
 
